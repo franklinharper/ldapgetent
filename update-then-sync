@@ -1,0 +1,35 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+# For testing
+my $etcDir= '.';
+# For production
+#my $etcDir= '/etc';
+
+if (@ARGV) {
+    system(@ARGV) == 0 or die "system @ARGV failed: $?";
+}
+
+my $groups= `./ldapgetent group`;
+my $users= `./ldapgetent passwd`;
+if ($groups ne "" && $users ne "") {
+    # System files are only overwritten if group and user information was 
+    # succesfully retrieved from LDAP.
+    system("cp $etcDir/group $etcDir/group.bak");
+    system("cp $etcDir/passwd $etcDir/passwd.bak");
+    writeFile('group', $groups);
+    writeFile('passwd', $users);
+}
+
+sub writeFile {
+    my ($fileName, $ldapEntries)= @_;
+
+    my $localEntries= `cat $etcDir/$fileName.local`;
+    chomp($localEntries);
+    open(OUT, ">$etcDir/$fileName");
+    print OUT $localEntries;
+    print OUT $ldapEntries;
+    close(OUT);
+}
