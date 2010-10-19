@@ -12,6 +12,8 @@ case on some NAS servers that don't come with a standard Linux distribution.
 
 Usage
 -----
-
 Usage: ldapgetent database [key ...]
 Currently database must be either 'passwd' or 'group'.
+
+If the LDAP server can't be reached ldapgent will not produce any output on STDOUT. An error
+message will be printed to STDERR.
