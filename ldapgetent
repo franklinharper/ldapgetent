@@ -4,62 +4,95 @@ use strict;
 use warnings;
 
 my ($database, @keys) = @ARGV;
-#print "database=$database\n";
-#print "keys=@keys\n";
 
-if (!$database || $database ne "passwd") {
+if (!$database) {
     usage();
 }
 
-
 my $filter;
 if ($database eq "passwd") {
-    if (scalar @keys == 0) {
-        $filter= "(objectClass=posixAccount)";
-    }
-    else {
-        my $keyFilter;
-        for my $key (@keys) {
-            $keyFilter .= "(uid=$key)";
-        }
-        $filter= "(&(objectClass=posixAccount)(|$keyFilter))";
-    }
+    $filter= createFilter("posixAccount", "uid");
+}
+elsif ($database eq "group") {
+    $filter= createFilter("posixGroup", "cn");
+}
+else {
+    usage();
 }
 
 my $passwdSearch= "ldapsearch -L -L -L -x -h 127.0.0.1 '$filter'";
 my $passwdResult= `$passwdSearch`;
 
-# Hash that will contain key value pairs for each entry
+# Hash that will contain key value pairs for each record
 my %ei= ();
 
 for (split /^/, $passwdResult) {
+    # Store LDIF attribute:value pairs in a hash of arrays.
     if (/^(.*): (.*)/) {
-       $ei{$1}=  $2;
+       if ( exists  $ei{$1} ) {
+           # Add value to existing array.
+           push(@{$ei{$1}}, $2)
+       }
+       else {
+           # Create new value array for this key.
+           $ei{$1}=  [$2];
+       }
     }
+    # A blank line is the record separator.
     elsif (/^$/) {
-        # print "-------------------\n";
-        # while ( my ($key, $value) = each(%ei) ) {
-        #     print "$key => $value\n";
-        # }
-        # Each print is on a separate line so that the undefined variable
-        # can easily be determined from the perl warning message.
-        print "$ei{uid}:x:";
-        print "$ei{uidNumber}:";
-        print "$ei{gidNumber}:";
-	if ( $ei{gecos} ) {
-            print "$ei{gecos}:";
-        }
-	else {
-            print "$ei{uid}:";
-        }
-        print "$ei{homeDirectory}:";
-        print "$ei{loginShell}\n";
+        printRecord(%ei);
+        # Create new empty hash for the next LDIF record.
 	%ei= ();
     }
 }
 
+sub createFilter {
+    my($objectClass, $keyProperty) = @_;
+
+    $filter= "(objectClass=$objectClass)";
+    if (scalar @keys != 0) {
+        my $keyFilter;
+        for my $keyVal (@keys) {
+            $keyFilter .= "($keyProperty=$keyVal)";
+        }
+        $filter= "(&$filter(|$keyFilter))";
+    }
+    return $filter;
+}
+
+sub printRecord {
+    my (%ei) = @_;
+    
+    # for my $attribute ( keys %ei ) {
+    #     print "$attribute: @{ $ei{$attribute} }\n";
+    # }
+    if ($database eq "passwd") {
+        # Each print is on a separate line so that the undefined variable
+        # can easily be determined from the perl warning message.
+        print "$ei{uid}[0]:x:";
+        print "$ei{uidNumber}[0]:";
+        print "$ei{gidNumber}[0]:";
+        if ( $ei{gecos}[0] ) {
+            print "$ei{gecos}[0]:";
+        }
+        else {
+            print "$ei{uid}[0]:";
+        }
+        print "$ei{homeDirectory}[0]:";
+        print "$ei{loginShell}[0]\n";
+    }
+    elsif ($database eq "group") {
+        print "$ei{cn}[0]:*:";
+        print "$ei{gidNumber}[0]:";
+        if (  exists $ei{"memberUid"} ) {
+            print join(':', @{$ei{"memberUid"}}),"\n";
+        }
+    }
+}
+ 
 sub usage {
    print "Usage: ldapgetent database [key ...]\n";
-   print "Currently database must be either 'passwd' or 'group'.\n";
+   print "Database must be either 'passwd' or 'group'.\n";
    exit;
 }
+
